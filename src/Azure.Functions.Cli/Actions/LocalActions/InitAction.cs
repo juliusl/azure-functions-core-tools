@@ -416,6 +416,8 @@ namespace Azure.Functions.Cli.Actions.LocalActions
                 hostJsonContent = await AddBundleConfig(hostJsonContent);
             }
 
+            hostJsonContent = await AddLoggingConfig(hostJsonContent);
+
             await WriteFiles("host.json", hostJsonContent);
         }
 
@@ -425,6 +427,16 @@ namespace Azure.Functions.Cli.Actions.LocalActions
             var bundleConfigContent = await StaticResources.BundleConfig;
             var bundleConfig = JsonConvert.DeserializeObject<JToken>(bundleConfigContent);
             hostJsonObj.Add("extensionBundle", bundleConfig);
+            return JsonConvert.SerializeObject(hostJsonObj, Formatting.Indented);
+        }
+
+
+        private static async Task<string> AddLoggingConfig(string hostJsonContent)
+        {
+            var hostJsonObj = JsonConvert.DeserializeObject<JObject>(hostJsonContent);
+            var loggingConfigContent = await StaticResources.LoggingConfig;
+            var loggingConfig = JsonConvert.DeserializeObject<JToken>(loggingConfigContent);
+            hostJsonObj.Add("logging", loggingConfig);
             return JsonConvert.SerializeObject(hostJsonObj, Formatting.Indented);
         }
     }
