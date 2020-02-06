@@ -39,7 +39,7 @@ steps:
       # acquire access token from Azure CLI and export it to AZURE_MANAGEMENT_ACCESS_TOKEN
       $accessToken = (az account get-access-token --query "accessToken" | % { $_.Trim('"') })
       echo "##vso[task.setvariable variable=azure_management_access_token]$accessToken"
-- pwsh: |
+- pwsh: | 
     .\build.ps1
   env:
     AzureBlobSigningConnectionString: $(AzureBlobSigningConnectionString)
@@ -53,10 +53,44 @@ steps:
     testResultsFiles: '**/*.trx'
     failTaskOnFailedTests: true
   condition: succeededOrFailed()
+- task: EsrpCodeSigning@1
+  inputs:
+    ConnectedServiceName: 'ESRP Service'
+    FolderPath: '$(Build.Repository.LocalPath)\artifacts'
+    Pattern: '*.msi'
+    signConfigType: 'inlineSignParams'
+    inlineOperation: |
+      [
+              {
+                  "KeyCode" : "CP-230012",
+                  "OperationCode" : "SigntoolSign",
+                  "Parameters" : {
+                      "OpusName" : "Microsoft",
+                      "OpusInfo" : "http://www.microsoft.com",
+                      "FileDigest" : "/fd \"SHA256\"",
+                      "PageHash" : "/NPH",
+                      "TimeStamp" : "/tr \"http://rfc3161.gtm.corp.microsoft.com/TSS/HttpTspServer\" /td sha256"
+                  },
+                  "ToolName" : "sign",
+                  "ToolVersion" : "1.0"
+              },
+              {
+                  "KeyCode" : "CP-230012",
+                  "OperationCode" : "SigntoolVerify",
+                  "Parameters" : {},
+                  "ToolName" : "sign",
+                  "ToolVersion" : "1.0"
+              }
+          ]
+    SessionTimeout: '60'
+    MaxConcurrency: '50'
+    MaxRetryAttempts: '5'  
 - task: CopyFiles@2
   inputs:
     SourceFolder: '$(Build.Repository.LocalPath)\artifacts'
-    Contents: 'Azure.Functions.Cli.*'
+    Contents: |
+      Azure.Functions.Cli.*
+      func-cli*.msi
     TargetFolder: '$(Build.ArtifactStagingDirectory)'
     CleanTargetFolder: true
 - task: PublishBuildArtifacts@1

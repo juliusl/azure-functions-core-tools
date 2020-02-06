@@ -1,3 +1,17 @@
+$baseDir = Get-Location
+
+if (-not (@($env:Path -split ";") -contains $env:WIX))
+{
+    # Check if the Wix path points to the bin folder
+    if ((Split-Path $env:WIX -Leaf) -ne "bin")
+    {
+        $env:Path += ";$env:WIX\bin"
+    }
+    else
+    {
+        $env:Path += ";$env:WIX"
+    }
+}
 
 if ($env:APPVEYOR_REPO_BRANCH -eq "disabled") {
     Set-Location ".\src\Azure.Functions.Cli"
@@ -33,4 +47,32 @@ if ($env:APPVEYOR_REPO_BRANCH -eq "master") {
 else {
     Invoke-Expression -Command  "dotnet run"
     if ($LastExitCode -ne 0) { $host.SetShouldExit($LastExitCode)  }
+}
+
+# Get runtime version
+$artifactsPath = "$baseDir\artifacts"
+$cli = Get-ChildItem -Path $artifactsPath -Include func.dll -Recurse | Select-Object -First 1
+$cliVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($cli).FileVersion
+
+# Generate MSI installers for Windows
+@('x64', 'x86') | ForEach-Object { 
+    $platform = $_
+
+    Copy-Item "$basedir\icon.ico" -Destination $artifactsPath\win-$platform
+    Copy-Item "$basedir\license.rtf" -Destination $artifactsPath\win-$platform
+    Copy-Item "$basedir\installbanner.bmp" -Destination $artifactsPath\win-$platform
+    Copy-Item "$basedir\installdialog.bmp" -Destination $artifactsPath\win-$platform
+    Set-Location "$artifactsPath\win-$platform"
+    
+    $masterWxsName = "funcinstall"
+    $fragmentName = "$platform-frag"
+    $msiName = "func-cli"
+    
+    $masterWxsPath = "$baseDir\$masterWxsName.wxs"
+    $fragmentPath = "$baseDir\$fragmentName.wxs"
+    $msiPath = "$artifactsPath\$msiName-$platform.msi"
+    
+    Invoke-Expression "heat dir '.' -cg FuncHost -dr INSTALLDIR -gg -ke -out $fragmentPath -srd -sreg -template fragment -var var.Source"
+    Invoke-Expression "candle -arch $platform -dPlatform='$platform' -dSource='.' -dProductVersion='$cliVersion' $masterWxsPath $fragmentPath"
+    Invoke-Expression "light -ext WixUIExtension -out $msiPath -sice:ICE61 $masterWxsName.wixobj $fragmentName.wixobj" 
 }
